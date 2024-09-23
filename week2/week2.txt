@@ -1,0 +1,315 @@
+// Code Written by: Hayden Shaddix 
+// Exercise 1 
+
+
+#include <iostream>
+
+// Function to swap two integers
+void swap(int &a, int &b) {
+    int temp = a;
+    a = b;
+    b = temp;
+}
+
+int main() {
+    // Arrays A and B with 10 integers each
+    int A[10] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
+    int B[10] = {10, 9, 8, 7, 6, 5, 4, 3, 2, 1};
+
+    // Print arrays before swapping
+    std::cout << "Before swapping:\n";
+    std::cout << "A: ";
+    for (int i = 0; i < 10; i++) {
+        std::cout << A[i] << " ";
+    }
+    std::cout << "\nB: ";
+    for (int i = 0; i < 10; i++) {
+        std::cout << B[i] << " ";
+    }
+    std::cout << std::endl;
+
+    // Swapping the values between arrays A and B
+    for (int i = 0; i < 10; i++) {
+        swap(A[i], B[i]);
+    }
+
+    // Print arrays after swapping
+    std::cout << "\nAfter swapping:\n";
+    std::cout << "A: ";
+    for (int i = 0; i < 10; i++) {
+        std::cout << A[i] << " ";
+    }
+    std::cout << "\nB: ";
+    for (int i = 0; i < 10; i++) {
+        std::cout << B[i] << " ";
+    }
+    std::cout << std::endl;
+
+    return 0;
+}
+
+// Code Written by: Hayden Shaddix 
+// Exercise 2 
+
+
+#include <iostream>
+#include <string>
+
+// Struct to hold information about TAC-HEP students
+struct Student {
+    std::string name;
+    std::string email;
+    std::string username;
+    std::string experiment;
+};
+
+// Function to print the student details without allowing modification
+void printStudentInfo(const Student &student) {
+    std::cout << "Name: " << student.name << std::endl;
+    std::cout << "Email: " << student.email << std::endl;
+    std::cout << "Username: " << student.username << std::endl;
+    std::cout << "Experiment: " << student.experiment << std::endl;
+    std::cout << "-------------------------------" << std::endl;
+}
+
+int main() {
+    // Creating multiple student objects (Decided to do 3, but would be the same for any number)
+    Student student1 = {"Hayden shaddix", "hshaddix@niu.edu", "hshaddix", "ATLAS"};
+    Student student2 = {"Fatima Rodriguez", "fatima@niu.edu", "fatima", "Atlas"};
+    Student student3 = {"Ashling Quinn", "aq3942@princeton.edu", "aq3942", "CMS"};
+
+    // Printing student information
+    printStudentInfo(student1);
+    printStudentInfo(student2);
+    printStudentInfo(student3);
+
+    return 0;
+}
+// Code Written by Hayden Shaddix 
+// Exercise 3 
+
+#include <iostream>
+#include <string>
+
+// Function to determine the winner of rock, paper, scissors
+std::string rockPaperScissors(const std::string& player1Choice, const std::string& player2Choice) {
+    if (player1Choice == player2Choice) {
+        return "Draw";
+    } else if ((player1Choice == "rock" && player2Choice == "scissors") ||
+               (player1Choice == "scissors" && player2Choice == "paper") ||
+               (player1Choice == "paper" && player2Choice == "rock")) {
+        return "Player 1 wins!";
+    } else {
+        return "Player 2 wins!";
+    }
+}
+
+int main() {
+    // Simulating player choices
+    std::string player1Choice, player2Choice;
+
+    // Input for both players
+    std::cout << "Player 1, enter your choice (rock, paper, scissors): ";
+    std::cin >> player1Choice;
+    std::cout << "Player 2, enter your choice (rock, paper, scissors): ";
+    std::cin >> player2Choice;
+
+    // Determine and display the result
+    std::string result = rockPaperScissors(player1Choice, player2Choice);
+    std::cout << result << std::endl;
+
+    return 0;
+}
+// Code Written by: Hayden Shaddix
+// Exercise 4
+
+
+#include <iostream>
+#include <vector>
+#include <math.h>
+#include <stdlib.h>
+#include <string.h>
+#include "t1.h"
+#include <TMath.h>
+#include <TFile.h>
+#include <TTree.h>
+#include <TH1F.h>
+#include <TCanvas.h>
+#include <TLorentzVector.h>
+
+//------------------------------------------------------------------------------
+// Particle Class
+//
+class Particle {
+    public:
+        Particle();
+        Particle(double pt, double eta, double phi, double E); // 4-momentum constructor
+
+        double pt, eta, phi, E, m, p[4];
+        void p4(double pT, double eta, double phi, double energy);
+        void print() const;
+        void setMass(double mass);
+        double sintheta() const;
+};
+
+//------------------------------------------------------------------------------
+
+//*****************************************************************************
+//                                                                             *
+//    MEMBERS functions of the Particle Class                                  *
+//                                                                             *
+//*****************************************************************************
+
+//
+//*** Default constructor ------------------------------------------------------
+//
+Particle::Particle() : pt(0.0), eta(0.0), phi(0.0), E(0.0), m(0.0) {
+    p[0] = p[1] = p[2] = p[3] = 0.0;
+}
+
+//*** Additional constructor (4-momentum) --------------------------------------
+Particle::Particle(double pt, double eta, double phi, double E) : pt(pt), eta(eta), phi(phi), E(E) {
+    // Calculate the 4-momentum components
+    p[0] = pt * cos(phi);      // px
+    p[1] = pt * sin(phi);      // py
+    p[2] = pt * sinh(eta);     // pz
+    p[3] = E;                  // energy
+}
+
+//
+//*** Members  ------------------------------------------------------
+//
+double Particle::sintheta() const {
+    // sintheta = pt / |p| where |p| is the magnitude of the momentum
+    double pMag = sqrt(p[0]*p[0] + p[1]*p[1] + p[2]*p[2]);
+    return pt / pMag;
+}
+
+void Particle::p4(double pT, double eta, double phi, double energy) {
+    pt = pT;
+    this->eta = eta;
+    this->phi = phi;
+    E = energy;
+    
+    p[0] = pt * cos(phi);   // px
+    p[1] = pt * sin(phi);   // py
+    p[2] = pt * sinh(eta);  // pz
+    p[3] = E;               // energy
+}
+
+void Particle::setMass(double mass) {
+    m = mass;
+}
+
+//
+//*** Prints 4-vector ----------------------------------------------------------
+void Particle::print() const {
+    std::cout << "4-momentum: (" << p[0] << ", " << p[1] << ", " << p[2] << ", " << p[3] << ")" << std::endl;
+    std::cout << "Sin(Theta): " << sintheta() << std::endl;
+}
+
+//------------------------------------------------------------------------------
+// Lepton Class (inherits from Particle)
+//------------------------------------------------------------------------------
+class Lepton : public Particle {
+    public:
+        Lepton();
+        Lepton(double pt, double eta, double phi, double E, int charge);
+
+        int charge;
+        void setCharge(int q);
+        void print() const;
+};
+
+Lepton::Lepton() : Particle(), charge(0) {}
+
+Lepton::Lepton(double pt, double eta, double phi, double E, int charge) 
+    : Particle(pt, eta, phi, E), charge(charge) {}
+
+void Lepton::setCharge(int q) {
+    charge = q;
+}
+
+void Lepton::print() const {
+    Particle::print(); // Call the parent class print function
+    std::cout << "Charge: " << charge << std::endl;
+}
+
+//------------------------------------------------------------------------------
+// Jet Class (inherits from Particle)
+//------------------------------------------------------------------------------
+class Jet : public Particle {
+    public:
+        Jet();
+        Jet(double pt, double eta, double phi, double E, int hadronFlavour);
+
+        int hadronFlavour;
+        void setHadronFlavour(int flavour);
+        void print() const;
+};
+
+Jet::Jet() : Particle(), hadronFlavour(0) {}
+
+Jet::Jet(double pt, double eta, double phi, double E, int hadronFlavour)
+    : Particle(pt, eta, phi, E), hadronFlavour(hadronFlavour) {}
+
+void Jet::setHadronFlavour(int flavour) {
+    hadronFlavour = flavour;
+}
+
+void Jet::print() const {
+    Particle::print(); // Call the parent class print function
+    std::cout << "Hadron Flavour: " << hadronFlavour << std::endl;
+}
+
+//------------------------------------------------------------------------------
+// Main Function
+//------------------------------------------------------------------------------
+int main() {
+    // Input ROOT file and tree
+    TFile *f = new TFile("input.root", "READ");
+    TTree *t1 = (TTree*)(f->Get("t1"));
+
+    // Declare branches as vectors instead of Float_t
+    std::vector<float> *lepPt = nullptr, *lepEta = nullptr, *lepPhi = nullptr, *lepE = nullptr;
+    std::vector<int> *lepQ = nullptr;
+    std::vector<float> *jetPt = nullptr, *jetEta = nullptr, *jetPhi = nullptr, *jetE = nullptr;
+    std::vector<int> *jetHadronFlavour = nullptr;
+
+    // Set branch addresses
+    t1->SetBranchAddress("lepPt", &lepPt);
+    t1->SetBranchAddress("lepEta", &lepEta);
+    t1->SetBranchAddress("lepPhi", &lepPhi);
+    t1->SetBranchAddress("lepE", &lepE);
+    t1->SetBranchAddress("lepQ", &lepQ);
+    
+    t1->SetBranchAddress("njets", &njets);
+    t1->SetBranchAddress("jetPt", &jetPt);
+    t1->SetBranchAddress("jetEta", &jetEta);
+    t1->SetBranchAddress("jetPhi", &jetPhi);
+    t1->SetBranchAddress("jetE", &jetE);
+    t1->SetBranchAddress("jetHadronFlavour", &jetHadronFlavour);
+
+    // Total number of events in ROOT tree
+    Long64_t nentries = t1->GetEntries();
+
+    for (Long64_t jentry = 0; jentry < 100; jentry++) {
+        t1->GetEntry(jentry);
+        std::cout << "Event " << jentry << std::endl;
+
+        // Loop over leptons
+        for (size_t i = 0; i < lepPt->size(); ++i) {
+            Lepton lepton(lepPt->at(i), lepEta->at(i), lepPhi->at(i), lepE->at(i), lepQ->at(i));
+            lepton.print();
+        }
+
+        // Loop over jets
+        for (size_t i = 0; i < jetPt->size(); ++i) {
+            Jet jet(jetPt->at(i), jetEta->at(i), jetPhi->at(i), jetE->at(i), jetHadronFlavour->at(i));
+            jet.print();
+        }
+    }
+
+    return 0;
+}
+

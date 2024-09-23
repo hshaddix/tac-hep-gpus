@@ -1,4 +1,6 @@
 // Code Written by: Hayden Shaddix 
+// Exercise 2 
+
 
 #include <iostream>
 #include <string>
