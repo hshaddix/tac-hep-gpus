@@ -1,4 +1,5 @@
 // Code Written by Hayden Shaddix 
+// Acessible at the Github: https://github.com/hshaddix/tac-hep-gpus/blob/main/week3/
 
 // Exercise 1
 
