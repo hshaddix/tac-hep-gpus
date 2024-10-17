@@ -1,5 +1,6 @@
 // Code written by: Hayden Shaddix 
-//
+// Can be found at repository: https://github.com/hshaddix/tac-hep-gpus/edit/main/week4
+
 //Exercise 1 
 
 #include <stdio.h>
