@@ -1,0 +1,505 @@
+/// End of class Project 
+// Work done by: Hayden Shaddix 
+//
+
+// Part 1: C++ and Profiling 
+
+#include <iostream>
+#include <vector>
+#include <cstdlib>
+#include <chrono>
+
+#define DSIZE 512
+
+using namespace std;
+
+// Initialize matrix with random values
+void initializeMatrix(vector<vector<int>>& matrix) {
+    for (int i = 0; i < DSIZE; ++i)
+        for (int j = 0; j < DSIZE; ++j)
+            matrix[i][j] = rand() % 10;
+}
+
+// 2D stencil function
+void applyStencil(vector<vector<int>>& matrix) {
+    vector<vector<int>> temp = matrix; 
+    int radius = 3;
+
+    for (int i = radius; i < DSIZE - radius; ++i) {
+        for (int j = radius; j < DSIZE - radius; ++j) {
+            int sum = 0;
+            for (int di = -radius; di <= radius; ++di)
+                for (int dj = -radius; dj <= radius; ++dj)
+                    sum += matrix[i + di][j + dj];
+            temp[i][j] = sum;
+        }
+    }
+
+    matrix = temp;
+}
+
+// Matrix multiplication
+void matrixMultiply(const vector<vector<int>>& A, const vector<vector<int>>& B, vector<vector<int>>& C) {
+    for (int i = 0; i < DSIZE; ++i) {
+        for (int j = 0; j < DSIZE; ++j) {
+            C[i][j] = 0;
+            for (int k = 0; k < DSIZE; ++k)
+                C[i][j] += A[i][k] * B[k][j];
+        }
+    }
+}
+
+// Verify results
+bool verifyResult(const vector<vector<int>>& matrix) {
+    int total = 0;
+    for (const auto& row : matrix)
+        for (const auto& elem : row)
+            total += elem;
+
+    cout << "Matrix sum: " << total << endl;
+    return true;
+}
+
+int main() {
+    vector<vector<int>> A(DSIZE, vector<int>(DSIZE));
+    vector<vector<int>> B(DSIZE, vector<int>(DSIZE));
+    vector<vector<int>> C(DSIZE, vector<int>(DSIZE));
+
+    initializeMatrix(A);
+    initializeMatrix(B);
+
+    auto start = chrono::high_resolution_clock::now();
+    applyStencil(A);
+    applyStencil(B);
+    auto end = chrono::high_resolution_clock::now();
+    cout << "Time for stencil: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms\n";
+
+    start = chrono::high_resolution_clock::now();
+    matrixMultiply(A, B, C);
+    end = chrono::high_resolution_clock::now();
+    cout << "Time for matrix multiplication: " << chrono::duration_cast<chrono::milliseconds>(end - start).count() << " ms\n";
+
+    verifyResult(C);
+
+    return 0;
+}
+
+// Output: 
+// Time for stencil: 260 ms
+// Time for matrix multiplication: 3106 ms
+// Matrix sum: -648442996
+
+// Part 2: CUDA Integration 
+
+#include <iostream>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+#define DSIZE 512
+#define RADIUS 3
+
+// CUDA error-checking utility
+void checkCudaError(cudaError_t err, const char* msg) {
+    if (err != cudaSuccess) {
+        std::cerr << msg << " - Error: " << cudaGetErrorString(err) << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+// Initialize matrix with arbitrary values on host
+void initializeMatrix(int* matrix) {
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        matrix[i] = rand() % 10;
+    }
+}
+
+// Kernel for stencil operation
+__global__ void stencilKernel(int* matrix, int* result) {
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int radius = RADIUS;
+
+    if (x >= radius && x < DSIZE - radius && y >= radius && y < DSIZE - radius) {
+        int sum = 0;
+        for (int i = -radius; i <= radius; ++i)
+            for (int j = -radius; j <= radius; ++j)
+                sum += matrix[(y + j) * DSIZE + (x + i)];
+        result[y * DSIZE + x] = sum;
+    }
+}
+
+// Kernel for matrix multiplication
+__global__ void matrixMultiplyKernel(int* A, int* B, int* C) {
+    int row = blockIdx.y * blockDim.y + threadIdx.y;
+    int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < DSIZE && col < DSIZE) {
+        int sum = 0;
+        for (int k = 0; k < DSIZE; k++) {
+            sum += A[row * DSIZE + k] * B[k * DSIZE + col];
+        }
+        C[row * DSIZE + col] = sum;
+    }
+}
+
+// Verify results (simple sum check)
+bool verifyResult(int* matrix) {
+    int total = 0;
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        total += matrix[i];
+    }
+    std::cout << "Matrix sum: " << total << std::endl;
+    return true;
+}
+
+int main() {
+    int* h_A = new int[DSIZE * DSIZE];
+    int* h_B = new int[DSIZE * DSIZE];
+    int* h_C = new int[DSIZE * DSIZE];
+
+    initializeMatrix(h_A);
+    initializeMatrix(h_B);
+
+    int *d_A, *d_B, *d_tempA, *d_tempB, *d_C;
+    cudaMalloc((void**)&d_A, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_B, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_tempA, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_tempB, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_C, DSIZE * DSIZE * sizeof(int));
+
+    cudaMemcpy(d_A, h_A, DSIZE * DSIZE * sizeof(int), cudaMemcpyHostToDevice);
+    cudaMemcpy(d_B, h_B, DSIZE * DSIZE * sizeof(int), cudaMemcpyHostToDevice);
+
+    dim3 threadsPerBlock(16, 16);
+    dim3 blocksPerGrid((DSIZE + threadsPerBlock.x - 1) / threadsPerBlock.x, (DSIZE + threadsPerBlock.y - 1) / threadsPerBlock.y);
+
+    stencilKernel<<<blocksPerGrid, threadsPerBlock>>>(d_A, d_tempA);
+    stencilKernel<<<blocksPerGrid, threadsPerBlock>>>(d_B, d_tempB);
+    cudaDeviceSynchronize();
+
+    matrixMultiplyKernel<<<blocksPerGrid, threadsPerBlock>>>(d_tempA, d_tempB, d_C);
+    cudaMemcpy(h_C, d_C, DSIZE * DSIZE * sizeof(int), cudaMemcpyDeviceToHost);
+
+    verifyResult(h_C);
+
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_tempA);
+    cudaFree(d_tempB);
+    cudaFree(d_C);
+
+    return 0;
+}
+
+// Output:
+// Matrix sum: 560186929
+
+// Profiling
+// ==3250273== NVPROF is profiling process 3250273, command: ./CUDA
+// Matrix sum: 560186929
+// ==3250273== Profiling application: ./CUDA
+// ==3250273== Profiling result:
+//             Type  Time(%)      Time     Calls       Avg       Min       Max  Name
+//  GPU activities:   67.97%  784.53us         1  784.53us  784.53us  784.53us  matrixMultiplyKernel(int*, int*, int*)
+//                    14.21%  164.06us         2  82.031us  81.951us  82.111us  [CUDA memcpy HtoD]
+//                     9.73%  112.35us         2  56.175us  56.095us  56.255us  stencilKernel(int*, int*)
+//                     8.08%  93.214us         1  93.214us  93.214us  93.214us  [CUDA memcpy DtoH]
+//       API calls:   96.20%  291.08ms         5  58.217ms  4.1600us  290.73ms  cudaMalloc
+//                     1.87%  5.6726ms       228  24.879us      90ns  1.5433ms  cuDeviceGetAttribute
+//                     0.83%  2.5064ms         3  835.48us  8.6300us  2.4879ms  cudaLaunchKernel
+//                     0.82%  2.4856ms         3  828.52us  161.26us  2.1335ms  cudaMemcpy
+//                     0.21%  644.85us         5  128.97us  7.2510us  282.66us  cudaFree
+//                     0.03%  104.15us         1  104.15us  104.15us  104.15us  cudaDeviceSynchronize
+//                     0.02%  45.921us         2  22.960us  7.9200us  38.001us  cuDeviceGetName
+//                     0.01%  20.791us         2  10.395us  3.3900us  17.401us  cuDeviceGetPCIBusId
+//                     0.00%  3.0600us         4     765ns     100ns  2.3100us  cuDeviceGet
+//                     0.00%  1.7200us         3     573ns     160ns  1.3900us  cuDeviceGetCount
+//                     0.00%     980ns         2     490ns     430ns     550ns  cuDeviceTotalMem
+//                     0.00%     730ns         2     365ns     280ns     450ns  cuDeviceGetUuid
+//                    0.00%     310ns         1     310ns     310ns     310ns  cuModuleGetLoadingMode
+
+// Part 3: Optimized CUDA 
+
+#include <iostream>
+#include <cuda.h>
+#include <cuda_runtime.h>
+
+#define DSIZE 512
+#define RADIUS 3
+#define TILE_SIZE 16  // Tile size for shared memory
+
+// CUDA error-checking utility
+void checkCudaError(cudaError_t err, const char* msg) {
+    if (err != cudaSuccess) {
+        std::cerr << msg << " - Error: " << cudaGetErrorString(err) << std::endl;
+        exit(EXIT_FAILURE);
+    }
+}
+
+// Initialize matrix with arbitrary values on host
+void initializeMatrix(int* matrix) {
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        matrix[i] = rand() % 10;
+    }
+}
+
+// Kernel for stencil operation using shared memory
+__global__ void stencilKernel(int* matrix, int* result) {
+    __shared__ int tile[TILE_SIZE + 2 * RADIUS][TILE_SIZE + 2 * RADIUS];
+    int x = blockIdx.x * blockDim.x + threadIdx.x;
+    int y = blockIdx.y * blockDim.y + threadIdx.y;
+    int tx = threadIdx.x + RADIUS;
+    int ty = threadIdx.y + RADIUS;
+
+    if (x < DSIZE && y < DSIZE) {
+        // Load data into shared memory, including halo regions
+        tile[ty][tx] = matrix[y * DSIZE + x];
+        if (threadIdx.x < RADIUS) {
+            tile[ty][tx - RADIUS] = (x >= RADIUS) ? matrix[y * DSIZE + x - RADIUS] : 0;
+            tile[ty][tx + TILE_SIZE] = (x + TILE_SIZE < DSIZE) ? matrix[y * DSIZE + x + TILE_SIZE] : 0;
+        }
+        if (threadIdx.y < RADIUS) {
+            tile[ty - RADIUS][tx] = (y >= RADIUS) ? matrix[(y - RADIUS) * DSIZE + x] : 0;
+            tile[ty + TILE_SIZE][tx] = (y + TILE_SIZE < DSIZE) ? matrix[(y + TILE_SIZE) * DSIZE + x] : 0;
+        }
+        __syncthreads();
+
+        // Compute the stencil if within bounds
+        if (x >= RADIUS && x < DSIZE - RADIUS && y >= RADIUS && y < DSIZE - RADIUS) {
+            int sum = 0;
+            for (int i = -RADIUS; i <= RADIUS; i++) {
+                for (int j = -RADIUS; j <= RADIUS; j++) {
+                    sum += tile[ty + j][tx + i];
+                }
+            }
+            result[y * DSIZE + x] = sum;
+        }
+    }
+}
+
+// Kernel for matrix multiplication using shared memory
+__global__ void matrixMultiplyKernel(int* A, int* B, int* C) {
+    __shared__ int tileA[TILE_SIZE][TILE_SIZE];
+    __shared__ int tileB[TILE_SIZE][TILE_SIZE];
+
+    int row = blockIdx.y * TILE_SIZE + threadIdx.y;
+    int col = blockIdx.x * TILE_SIZE + threadIdx.x;
+
+    int sum = 0;
+    for (int i = 0; i < DSIZE / TILE_SIZE; ++i) {
+        // Load tiles from A and B into shared memory
+        tileA[threadIdx.y][threadIdx.x] = A[row * DSIZE + i * TILE_SIZE + threadIdx.x];
+        tileB[threadIdx.y][threadIdx.x] = B[(i * TILE_SIZE + threadIdx.y) * DSIZE + col];
+        __syncthreads();
+
+        // Perform partial matrix multiplication for this tile
+        for (int k = 0; k < TILE_SIZE; ++k) {
+            sum += tileA[threadIdx.y][k] * tileB[k][threadIdx.x];
+        }
+        __syncthreads();
+    }
+
+    if (row < DSIZE && col < DSIZE) {
+        C[row * DSIZE + col] = sum;
+    }
+}
+
+// Utility function to verify the result (simple sum check)
+bool verifyResult(int* matrix) {
+    int total = 0;
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        total += matrix[i];
+    }
+    std::cout << "Matrix sum: " << total << std::endl;
+    return true;  // Placeholder verification
+}
+
+int main() {
+    // Allocate host memory
+    int* h_A = new int[DSIZE * DSIZE];
+    int* h_B = new int[DSIZE * DSIZE];
+    int* h_C = new int[DSIZE * DSIZE];
+
+    initializeMatrix(h_A);
+    initializeMatrix(h_B);
+
+    // Allocate device memory
+    int *d_A, *d_B, *d_tempA, *d_tempB, *d_C;
+    cudaMalloc((void**)&d_A, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_B, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_tempA, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_tempB, DSIZE * DSIZE * sizeof(int));
+    cudaMalloc((void**)&d_C, DSIZE * DSIZE * sizeof(int));
+
+    // Create CUDA streams
+    cudaStream_t stream1, stream2;
+    cudaStreamCreate(&stream1);
+    cudaStreamCreate(&stream2);
+
+    // Copy data to device asynchronously
+    cudaMemcpyAsync(d_A, h_A, DSIZE * DSIZE * sizeof(int), cudaMemcpyHostToDevice, stream1);
+    cudaMemcpyAsync(d_B, h_B, DSIZE * DSIZE * sizeof(int), cudaMemcpyHostToDevice, stream2);
+
+    dim3 threadsPerBlock(TILE_SIZE, TILE_SIZE);
+    dim3 blocksPerGrid((DSIZE + TILE_SIZE - 1) / TILE_SIZE, (DSIZE + TILE_SIZE - 1) / TILE_SIZE);
+
+    // Launch stencil kernels on matrices A and B asynchronously
+    stencilKernel<<<blocksPerGrid, threadsPerBlock, 0, stream1>>>(d_A, d_tempA);
+    stencilKernel<<<blocksPerGrid, threadsPerBlock, 0, stream2>>>(d_B, d_tempB);
+
+    // Synchronize streams before proceeding to matrix multiplication
+    cudaStreamSynchronize(stream1);
+    cudaStreamSynchronize(stream2);
+
+    // Launch matrix multiplication kernel on a single stream
+    matrixMultiplyKernel<<<blocksPerGrid, threadsPerBlock>>>(d_tempA, d_tempB, d_C);
+
+    // Copy result back to host
+    cudaMemcpy(h_C, d_C, DSIZE * DSIZE * sizeof(int), cudaMemcpyDeviceToHost);
+
+    // Verify result
+    verifyResult(h_C);
+
+    // Clean up
+    delete[] h_A;
+    delete[] h_B;
+    delete[] h_C;
+    cudaFree(d_A);
+    cudaFree(d_B);
+    cudaFree(d_tempA);
+    cudaFree(d_tempB);
+    cudaFree(d_C);
+    cudaStreamDestroy(stream1);
+    cudaStreamDestroy(stream2);
+
+    return 0;
+}
+
+// Output: 
+// Matrix sum: 1295711823
+
+// Profiling 
+
+// ==3273902== NVPROF is profiling process 3273902, command: ./optimized_CUDA
+// Matrix sum: 1295711823
+// ==3273902== Profiling application: ./optimized_CUDA
+// ==3273902== Profiling result:
+//             Type  Time(%)      Time     Calls       Avg       Min       Max  Name
+//  GPU activities:   58.85%  568.15us         1  568.15us  568.15us  568.15us  matrixMultiplyKernel(int*, int*, int*)
+//                    17.02%  164.29us         2  82.143us  81.887us  82.399us  [CUDA memcpy HtoD]
+//                    14.07%  135.84us         2  67.919us  65.919us  69.919us  stencilKernel(int*, int*)
+//                    10.06%  97.118us         1  97.118us  97.118us  97.118us  [CUDA memcpy DtoH]
+//       API calls:   95.55%  275.74ms         5  55.147ms  4.4300us  275.35ms  cudaMalloc
+//                     2.60%  7.5065ms       228  32.923us     140ns  3.2381ms  cuDeviceGetAttribute
+//                     0.73%  2.0952ms         3  698.41us  10.880us  2.0721ms  cudaLaunchKernel
+//                     0.69%  1.9904ms         1  1.9904ms  1.9904ms  1.9904ms  cudaMemcpy
+//                     0.22%  626.50us         5  125.30us  5.3900us  266.11us  cudaFree
+//                     0.12%  342.29us         2  171.14us  149.17us  193.11us  cudaMemcpyAsync
+//                     0.04%  112.57us         2  56.286us  54.481us  58.092us  cudaStreamSynchronize
+//                     0.02%  55.852us         2  27.926us  4.9710us  50.881us  cudaStreamCreate
+//                     0.02%  51.611us         2  25.805us  11.291us  40.320us  cuDeviceGetName
+//                     0.01%  25.511us         2  12.755us  7.3500us  18.161us  cudaStreamDestroy
+//                     0.01%  22.762us         2  11.381us  4.5210us  18.241us  cuDeviceGetPCIBusId
+//                     0.00%  2.8510us         4     712ns     180ns  2.1800us  cuDeviceGet
+//                     0.00%  2.4500us         3     816ns     180ns  1.9500us  cuDeviceGetCount
+//                     0.00%  1.0210us         2     510ns     410ns     611ns  cuDeviceTotalMem
+//                     0.00%     930ns         2     465ns     380ns     550ns  cuDeviceGetUuid
+//                     0.00%     500ns         1     500ns     500ns     500ns  cuModuleGetLoadingMode
+
+// Part 4: Alpaka 
+
+#include <alpaka/alpaka.hpp>
+#include <iostream>
+#include <vector>
+
+#define DSIZE 512
+#define RADIUS 3
+
+using namespace alpaka;
+
+template<typename TAcc>
+ALPAKA_FN_ACC void stencilKernel(const TAcc& acc, int* matrix, int* result) {
+    const int x = blockIdx.x * blockDim.x + threadIdx.x;
+    const int y = blockIdx.y * blockDim.y + threadIdx.y;
+
+    if (x >= RADIUS && x < DSIZE - RADIUS && y >= RADIUS && y < DSIZE - RADIUS) {
+        int sum = 0;
+        for (int i = -RADIUS; i <= RADIUS; ++i)
+            for (int j = -RADIUS; j <= RADIUS; ++j)
+                sum += matrix[(y + j) * DSIZE + (x + i)];
+        result[y * DSIZE + x] = sum;
+    }
+}
+
+template<typename TAcc>
+ALPAKA_FN_ACC void matrixMultiplyKernel(const TAcc& acc, int* A, int* B, int* C) {
+    const int row = blockIdx.y * blockDim.y + threadIdx.y;
+    const int col = blockIdx.x * blockDim.x + threadIdx.x;
+
+    if (row < DSIZE && col < DSIZE) {
+        int sum = 0;
+        for (int k = 0; k < DSIZE; ++k) {
+            sum += A[row * DSIZE + k] * B[k * DSIZE + col];
+        }
+        C[row * DSIZE + col] = sum;
+    }
+}
+
+void initializeMatrix(std::vector<int>& matrix) {
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        matrix[i] = rand() % 10;
+    }
+}
+
+void verifyResult(const std::vector<int>& matrix) {
+    int total = 0;
+    for (int i = 0; i < DSIZE * DSIZE; ++i) {
+        total += matrix[i];
+    }
+    std::cout << "Matrix sum: " << total << std::endl;
+}
+
+int main() {
+    using Dim = dim::DimInt<2>;
+    using Idx = uint32_t;
+    using Acc = acc::AccCpuSerial<Dim, Idx>;
+
+    constexpr Idx blockDim = 16;
+    constexpr Idx blocksPerGrid = (DSIZE + blockDim - 1) / blockDim;
+    Vec<Dim, Idx> threadsPerBlock(blockDim, blockDim);
+    Vec<Dim, Idx> blocksPerGrid(blocksPerGrid, blocksPerGrid);
+
+    std::vector<int> h_A(DSIZE * DSIZE);
+    std::vector<int> h_B(DSIZE * DSIZE);
+    std::vector<int> h_C(DSIZE * DSIZE);
+
+    initializeMatrix(h_A);
+    initializeMatrix(h_B);
+
+    dev::DevCpu dev;
+    Queue<Acc> queue(dev);
+
+    auto d_A = allocBuf<int, Idx>(dev, Vec<Dim, Idx>(DSIZE, DSIZE));
+    auto d_B = allocBuf<int, Idx>(dev, Vec<Dim, Idx>(DSIZE, DSIZE));
+    auto d_tempA = allocBuf<int, Idx>(dev, Vec<Dim, Idx>(DSIZE, DSIZE));
+    auto d_tempB = allocBuf<int, Idx>(dev, Vec<Dim, Idx>(DSIZE, DSIZE));
+    auto d_C = allocBuf<int, Idx>(dev, Vec<Dim, Idx>(DSIZE, DSIZE));
+
+    queue.enqueue(memcpy(d_A, h_A.data()));
+    queue.enqueue(memcpy(d_B, h_B.data()));
+
+    // Stencil and matrix multiplication operations using Alpaka kernels
+    queue.enqueue(kernel::createTaskKernel<Acc>(blocksPerGrid, threadsPerBlock, stencilKernel<Acc>, d_A, d_tempA));
+    queue.enqueue(kernel::createTaskKernel<Acc>(blocksPerGrid, threadsPerBlock, stencilKernel<Acc>, d_B, d_tempB));
+    queue.enqueue(kernel::createTaskKernel<Acc>(blocksPerGrid, threadsPerBlock, matrixMultiplyKernel<Acc>, d_tempA, d_tempB, d_C));
+
+    queue.enqueue(memcpy(h_C.data(), d_C));
+    verifyResult(h_C);
+
+    return 0;
+}
+
+// Could not get to run :( (Alpaka.hpp not available? Did I miss how we are supposed to have Alpaka as a package? Probably my oversight, sorry)
